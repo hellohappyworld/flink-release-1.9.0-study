@@ -1,5 +1,6 @@
 package org.apache.flink.table.examples.scala.watermark
 
+import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -35,15 +36,19 @@ object TimestampsAndWatermarks {
 
       val timedInterval = 2000L
 
+      val format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
+      var watermark: Watermark = null
+
       // 获取水印时间
       override def getCurrentWatermark: Watermark = {
-        val watermark: Watermark = new Watermark(currentTimestamp - timedInterval)
+        watermark = new Watermark(currentTimestamp - timedInterval)
         watermark
       }
 
       // 抽取eventTimeStamp
       override def extractTimestamp(element: Order, previousElementTimestamp: Long): Long = {
         currentTimestamp = Math.max(element.time, currentTimestamp)
+        println("timestamp-->" + format.format(element.time) + ",currentTimestamp-->" + format.format(currentTimestamp) + ",watermark-->" + watermark)
         currentTimestamp
       }
     })
@@ -54,18 +59,28 @@ object TimestampsAndWatermarks {
     // 使用tableEnv.sqlQuery执行sql语句
     // 分组时要使用tumble(时间列，interval '窗口时间' second)来创建窗口
     val result: Table = tableEnv.sqlQuery(
+      //      """
+      //      select
+      //       userID,
+      //       count(1) as totalCount,
+      //       max(money) as maxMoney,
+      //       min(money) as minMoney,
+      //       sum(money) as totalMoney
+      //      from streamTable
+      //      group by
+      //      userID,
+      //      tumble(ordertime, interval '5' second)
+      //            """.stripMargin
+
       """
-select
- userID,
- count(1) as totalCount,
- max(money) as maxMoney,
- min(money) as minMoney,
- sum(money) as totalMoney
-from streamTable
-group by
-userID,
-tumble(ordertime, interval '5' second)
-      """.stripMargin
+      select
+       count(1) as totalCount,
+       min(ordertime),
+       max(ordertime)
+      from streamTable
+      group by
+      tumble(ordertime, interval '5' second)
+            """.stripMargin
     )
 
     val resultDs: DataStream[Row] = tableEnv.toAppendStream[Row](result)
